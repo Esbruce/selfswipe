@@ -1,9 +1,9 @@
 import SwipeCard from '@/components/SwipeCard';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { SwipeImage, useSwipe } from '@/contexts/SwipeContext';
+import { useSwipe } from '@/contexts/SwipeContext';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -14,39 +14,37 @@ import {
 
 export default function SwipeScreen() {
   const router = useRouter();
-  const { state, swipeLeft, swipeRight, setImages, setGenerating, setError, clearSession } = useSwipe();
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  // Mock data for now - will be replaced with actual image generation
-  const generateMockImages = (variationType: 'hairstyle' | 'outfit'): SwipeImage[] => {
-    const mockImages: SwipeImage[] = [];
-    for (let i = 0; i < 20; i++) {
-      mockImages.push({
-        id: `mock-${i}`,
-        uri: `https://picsum.photos/400/600?random=${i}`,
-        variationType,
-        isLiked: false,
-        generatedAt: new Date(),
-      });
-    }
-    return mockImages;
-  };
+  const { 
+    state, 
+    swipeLeft, 
+    swipeRight, 
+    initializeGeneration,
+    generateNextImage,
+    generateMoreImages,
+    setError, 
+    clearSession 
+  } = useSwipe();
 
   useEffect(() => {
-    if (state.currentSession && state.currentSession.images.length === 0 && !state.isGenerating && !isGenerating) {
-      // Start generating images
-      setIsGenerating(true);
-      setGenerating(true);
-      
-      // Simulate API call delay
-      setTimeout(() => {
-        const mockImages = generateMockImages(state.currentSession!.variationType);
-        setImages(mockImages);
-        setIsGenerating(false);
-        setGenerating(false);
-      }, 2000);
+    if (state.currentSession && state.currentSession.images.length === 0 && !state.isGenerating) {
+      // Start generating images using real Gemini API
+      initializeGeneration(state.currentSession.originalImageUri, state.currentSession.variationType);
     }
-  }, [state.currentSession?.id, state.currentSession?.images.length, state.isGenerating, isGenerating, setImages, setGenerating]);
+  }, [state.currentSession?.id, state.currentSession?.images.length, state.isGenerating]);
+
+  // Generate next image when user is close to the end
+  useEffect(() => {
+    if (state.currentSession && state.currentSession.images.length > 0) {
+      const currentIndex = state.currentSession.currentIndex;
+      const totalImages = state.currentSession.images.length;
+      const remainingImages = totalImages - currentIndex;
+      
+      // Generate next image when only 2 images remain
+      if (remainingImages <= 2 && currentIndex < state.currentSession.prompts.length - 1) {
+        generateNextImage();
+      }
+    }
+  }, [state.currentSession?.currentIndex, state.currentSession?.images.length]);
 
   const handleSwipeLeft = () => {
     swipeLeft();
@@ -60,27 +58,34 @@ export default function SwipeScreen() {
 
   const checkIfFinished = () => {
     if (state.currentSession && state.currentSession.currentIndex >= state.currentSession.images.length - 1) {
-      // All images have been swiped through
-      Alert.alert(
-        'All Done!',
-        `You've swiped through all ${state.currentSession.images.length} images. You liked ${state.currentSession.likedImages.length} of them.`,
-        [
-          {
-            text: 'Generate More',
-            onPress: () => {
-              // TODO: Generate more images based on liked ones
-              Alert.alert('Coming Soon', 'This feature will generate 10 more images based on your preferences!');
+      // Check if we've generated all 20 images
+      if (state.currentSession.images.length >= 20) {
+        // All images have been swiped through
+        Alert.alert(
+          'All Done!',
+          `You've swiped through all ${state.currentSession.images.length} images. You liked ${state.currentSession.likedImages.length} of them.`,
+          [
+            {
+              text: 'Generate More',
+              onPress: async () => {
+                try {
+                  await generateMoreImages();
+                } catch (error) {
+                  Alert.alert('Error', 'Failed to generate more images. Please try again.');
+                }
+              },
             },
-          },
-          {
-            text: 'Start Over',
-            onPress: () => {
-              clearSession();
-              router.push('/');
+            {
+              text: 'Start Over',
+              onPress: () => {
+                clearSession();
+                router.push('/');
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      }
+      // If we haven't generated all 20 yet, just wait for more images to be generated
     }
   };
 
@@ -117,13 +122,29 @@ export default function SwipeScreen() {
     );
   }
 
-  if (isGenerating || state.isGenerating) {
+  if (state.isGenerating) {
+    const progress = state.currentSession?.generationProgress;
     return (
       <ThemedView style={styles.container}>
         <ActivityIndicator size="large" color="#007AFF" />
         <ThemedText type="subtitle" style={styles.generatingText}>
-          Generating your variations...
+          {progress?.message || 'Generating your variations...'}
         </ThemedText>
+        {progress && (
+          <View style={styles.progressContainer}>
+            <View style={styles.progressBar}>
+              <View 
+                style={[
+                  styles.progressFill, 
+                  { width: `${progress.progress}%` }
+                ]} 
+              />
+            </View>
+            <ThemedText style={styles.progressText}>
+              {progress.progress}%
+            </ThemedText>
+          </View>
+        )}
         <ThemedText style={styles.generatingSubtext}>
           This may take a few moments
         </ThemedText>
@@ -150,6 +171,7 @@ export default function SwipeScreen() {
   const currentIndex = state.currentSession.currentIndex;
   const images = state.currentSession.images;
   const remainingImages = images.length - currentIndex;
+  const isWaitingForNextImage = remainingImages <= 2 && currentIndex < state.currentSession.prompts.length - 1;
 
   return (
     <ThemedView style={styles.container}>
@@ -184,6 +206,14 @@ export default function SwipeScreen() {
           Liked: {state.currentSession.likedImages.length} | 
           Remaining: {remainingImages}
         </ThemedText>
+        {isWaitingForNextImage && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#007AFF" />
+            <ThemedText style={styles.loadingText}>
+              Generating next image...
+            </ThemedText>
+          </View>
+        )}
       </View>
     </ThemedView>
   );
@@ -237,6 +267,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.7,
   },
+  progressContainer: {
+    width: '80%',
+    marginVertical: 20,
+    alignItems: 'center',
+  },
+  progressBar: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 4,
+  },
+  progressText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   errorTitle: {
     textAlign: 'center',
     marginBottom: 20,
@@ -266,6 +318,16 @@ const styles = StyleSheet.create({
   },
   statsText: {
     fontSize: 14,
+    opacity: 0.7,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 12,
     opacity: 0.7,
   },
 });

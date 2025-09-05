@@ -5,9 +5,9 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
-import { AuthProvider } from '@/contexts/AuthContext';
 import { SwipeProvider } from '@/contexts/SwipeContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { AuthProvider } from '../contexts/AuthContext';
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();

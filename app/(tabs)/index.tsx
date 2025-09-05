@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 
 import { HelloWave } from '@/components/HelloWave';
