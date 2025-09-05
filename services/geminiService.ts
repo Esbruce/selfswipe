@@ -43,35 +43,25 @@ class GeminiService {
     this.imageModel = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash-image-preview' });
   }
 
-  async analyzeImage(imageUri: string): Promise<ImageAnalysis> {
+  async analyzeImageAndGeneratePrompts(
+    imageUri: string, 
+    variationType: 'hairstyle' | 'outfit', 
+    count: number = 10
+  ): Promise<{ analysis: ImageAnalysis; prompts: string[] }> {
     const maxRetries = 3;
     let lastError: any;
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`🔍 Starting image analysis (attempt ${attempt}/${maxRetries})...`);
+        console.log(`🔍 Starting combined analysis and prompt generation (attempt ${attempt}/${maxRetries})...`);
+        console.log(`📊 Variation type: ${variationType}, Count: ${count}`);
+        
         // Convert image to base64
         const base64Image = await this.convertImageToBase64(imageUri);
+        console.log('✅ Image converted to base64 successfully');
         
-        const prompt = `
-          Analyze this portrait photo and provide detailed information about the person. 
-          Focus on features that would be important for generating consistent variations in hairstyles or outfits.
-          
-          Please provide the following information in a structured format:
-          - Gender (male/female/other)
-          - Age range (e.g., "20-30", "30-40", etc.)
-          - Hair color (e.g., "blonde", "brown", "black", "red", "gray")
-          - Hair length (e.g., "short", "medium", "long")
-          - Current hair style (e.g., "straight", "curly", "wavy", "pixie cut", "bob", etc.)
-          - Face shape (e.g., "oval", "round", "square", "heart", "diamond")
-          - Skin tone (e.g., "fair", "light", "medium", "olive", "tan", "dark")
-          - Eye color (e.g., "blue", "brown", "green", "hazel")
-          - Body type/build (e.g., "slim", "athletic", "average", "curvy")
-          - Current clothing style (e.g., "casual", "formal", "bohemian", "preppy", "edgy")
-          - Overall style aesthetic (e.g., "classic", "modern", "vintage", "minimalist", "eclectic")
-          
-          Be specific and detailed in your analysis. This information will be used to generate consistent variations.
-        `;
+        const prompt = this.createCombinedAnalysisAndPromptPrompt(variationType, count);
+        console.log(`📝 Combined prompt length: ${prompt.length} characters`);
 
         const result = await this.textModel.generateContent([
           {
@@ -85,14 +75,20 @@ class GeminiService {
 
         const response = await result.response;
         const text = response.text();
+        console.log(`📄 Raw response length: ${text.length} characters`);
+        console.log(`📄 Raw response preview: ${text.substring(0, 500)}...`);
         
-        // Parse the response to extract structured data
-        const analysis = this.parseImageAnalysis(text);
-        console.log('✅ Image analysis completed successfully');
-        return analysis;
+        // Parse the JSON response
+        const parsed = this.parseCombinedResponse(text, variationType, count);
+        console.log('✅ Combined analysis and prompt generation completed successfully');
+        console.log(`📊 Analysis keys: ${Object.keys(parsed.analysis).join(', ')}`);
+        console.log(`📝 Generated ${parsed.prompts.length} prompts`);
+        
+        return parsed;
       } catch (error) {
         lastError = error;
-        console.error(`❌ Error analyzing image (attempt ${attempt}/${maxRetries}):`, error);
+        console.error(`❌ Error in combined analysis (attempt ${attempt}/${maxRetries}):`, error);
+        console.error('Error details:', error);
         
         // Check if it's a retryable error (503, 429, or overloaded)
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -108,14 +104,16 @@ class GeminiService {
     }
     
     // If all retries failed
-    throw new Error(`Failed to analyze image after ${maxRetries} attempts. Last error: ${lastError?.message}`);
+    throw new Error(`Failed to analyze image and generate prompts after ${maxRetries} attempts. Last error: ${lastError?.message}`);
   }
 
+  // Keep the old method for backward compatibility, but mark as deprecated
   async generatePrompts(
     analysis: ImageAnalysis, 
     variationType: 'hairstyle' | 'outfit', 
     count: number
   ): Promise<string[]> {
+    console.warn('⚠️ generatePrompts is deprecated. Use analyzeImageAndGeneratePrompts instead.');
     try {
       console.log(`🤖 Generating ${count} ${variationType} prompts using Gemini...`);
       
@@ -189,6 +187,148 @@ Return ONLY the prompts, one per line, numbered 1-${count}.`;
     }
   }
 
+  private createCombinedAnalysisAndPromptPrompt(variationType: 'hairstyle' | 'outfit', count: number): string {
+    return `You are a professional image analysis and prompt generation expert. Analyze this portrait photo and generate ${count} diverse ${variationType} editing prompts.
+
+TASK: Analyze the person in the image and return a JSON response with both analysis data and editing prompts.
+
+ANALYSIS REQUIREMENTS:
+- Gender (male/female/other)
+- Age range (e.g., "20-30", "30-40", etc.)
+- Hair color (e.g., "blonde", "brown", "black", "red", "gray")
+- Hair length (e.g., "short", "medium", "long")
+- Current hair style (e.g., "straight", "curly", "wavy", "pixie cut", "bob", etc.)
+- Face shape (e.g., "oval", "round", "square", "heart", "diamond")
+- Skin tone (e.g., "fair", "light", "medium", "olive", "tan", "dark")
+- Eye color (e.g., "blue", "brown", "green", "hazel")
+- Body type/build (e.g., "slim", "athletic", "average", "curvy")
+- Current clothing style (e.g., "casual", "formal", "bohemian", "preppy", "edgy")
+- Overall style aesthetic (e.g., "classic", "modern", "vintage", "minimalist", "eclectic")
+
+PROMPT REQUIREMENTS:
+Generate ${count} unique ${variationType} editing prompts that:
+1. Use the inpainting/semantic masking approach
+2. Change ONLY the ${variationType === 'hairstyle' ? 'hair' : 'clothing/outfit'} while keeping facial features, skin tone, ${variationType === 'hairstyle' ? 'eyes, and everything else' : 'hair, and everything else'} exactly the same
+3. Create diverse ${variationType} styles
+4. Are appropriate for their age and ${variationType === 'hairstyle' ? 'face shape' : 'body type'}
+5. Include specific styling details and descriptions
+6. Use professional photography terminology
+
+RESPONSE FORMAT:
+Return ONLY a valid JSON object with this exact structure:
+{
+  "analysis": {
+    "gender": "string",
+    "ageRange": "string",
+    "hairColor": "string",
+    "hairLength": "string",
+    "hairStyle": "string",
+    "faceShape": "string",
+    "skinTone": "string",
+    "eyeColor": "string",
+    "bodyType": "string",
+    "clothingStyle": "string",
+    "overallStyle": "string"
+  },
+  "prompts": [
+    "Using the provided image, change only the ${variationType === 'hairstyle' ? 'hair' : 'clothing'} to [specific description]. Keep everything else in the image exactly the same, preserving the original facial features, skin tone, ${variationType === 'hairstyle' ? 'eye color' : 'hair'}, facial structure, and composition. The person's identity and appearance should remain completely unchanged except for the ${variationType}.",
+    "... (repeat for all ${count} prompts)"
+  ]
+}
+
+IMPORTANT: Return ONLY the JSON object, no additional text or formatting.`;
+  }
+
+  private parseCombinedResponse(text: string, variationType: 'hairstyle' | 'outfit', expectedCount: number): { analysis: ImageAnalysis; prompts: string[] } {
+    console.log(`🔍 Parsing combined response...`);
+    console.log(`📄 Response length: ${text.length} characters`);
+    
+    try {
+      // Try to extract JSON from the response
+      let jsonText = text.trim();
+      
+      // Look for JSON object boundaries
+      const jsonStart = jsonText.indexOf('{');
+      const jsonEnd = jsonText.lastIndexOf('}') + 1;
+      
+      if (jsonStart !== -1 && jsonEnd > jsonStart) {
+        jsonText = jsonText.substring(jsonStart, jsonEnd);
+        console.log(`📄 Extracted JSON: ${jsonText.substring(0, 200)}...`);
+      } else {
+        console.warn('⚠️ No JSON object found in response, trying to parse entire text');
+      }
+      
+      const parsed = JSON.parse(jsonText);
+      console.log(`✅ Successfully parsed JSON response`);
+      console.log(`📊 Parsed keys: ${Object.keys(parsed).join(', ')}`);
+      
+      // Validate structure
+      if (!parsed.analysis || !parsed.prompts) {
+        throw new Error('Invalid JSON structure: missing analysis or prompts');
+      }
+      
+      if (!Array.isArray(parsed.prompts)) {
+        throw new Error('Invalid JSON structure: prompts must be an array');
+      }
+      
+      console.log(`📊 Analysis keys: ${Object.keys(parsed.analysis).join(', ')}`);
+      console.log(`📝 Prompts count: ${parsed.prompts.length}`);
+      
+      // Validate analysis has required fields
+      const requiredAnalysisFields = ['gender', 'ageRange', 'hairColor', 'hairLength', 'hairStyle', 'faceShape', 'skinTone', 'eyeColor', 'bodyType', 'clothingStyle', 'overallStyle'];
+      const missingFields = requiredAnalysisFields.filter(field => !parsed.analysis[field]);
+      if (missingFields.length > 0) {
+        console.warn(`⚠️ Missing analysis fields: ${missingFields.join(', ')}`);
+      }
+      
+      // Ensure we have the expected number of prompts
+      const prompts = parsed.prompts.slice(0, expectedCount);
+      if (prompts.length < expectedCount) {
+        console.warn(`⚠️ Expected ${expectedCount} prompts, got ${prompts.length}`);
+      }
+      
+      // Log each prompt for debugging
+      prompts.forEach((prompt: string, index: number) => {
+        console.log(`📝 Prompt ${index + 1}: ${prompt.substring(0, 100)}...`);
+      });
+      
+      return {
+        analysis: parsed.analysis as ImageAnalysis,
+        prompts: prompts as string[]
+      };
+      
+    } catch (error) {
+      console.error('❌ Error parsing combined response:', error);
+      console.error('Raw response:', text);
+      
+      // Fallback: try to extract prompts using the old method
+      console.log('🔄 Attempting fallback parsing...');
+      const fallbackPrompts = this.parsePromptsFromResponse(text, expectedCount);
+      
+      // Create a default analysis
+      const fallbackAnalysis: ImageAnalysis = {
+        gender: 'unknown',
+        ageRange: 'unknown',
+        hairColor: 'unknown',
+        hairLength: 'unknown',
+        hairStyle: 'unknown',
+        faceShape: 'unknown',
+        skinTone: 'unknown',
+        eyeColor: 'unknown',
+        bodyType: 'unknown',
+        clothingStyle: 'unknown',
+        overallStyle: 'unknown'
+      };
+      
+      console.log(`🔄 Fallback successful: ${fallbackPrompts.length} prompts extracted`);
+      
+      return {
+        analysis: fallbackAnalysis,
+        prompts: fallbackPrompts
+      };
+    }
+  }
+
   private parsePromptsFromResponse(text: string, expectedCount: number): string[] {
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     const prompts: string[] = [];
@@ -237,13 +377,11 @@ Return ONLY the prompts, one per line, numbered 1-${count}.`;
           });
         }
 
-        // Retry logic for image generation
-        const maxRetries = 3;
-        let imageGenerated = false;
-        
-        for (let retryAttempt = 1; retryAttempt <= maxRetries && !imageGenerated; retryAttempt++) {
-          try {
-            console.log(`⏳ Sending request to Gemini for image ${i + 1} (attempt ${retryAttempt}/${maxRetries})...`);
+        try {
+          console.log(`⏳ Sending request to Gemini for image ${i + 1}...`);
+          console.log(`📝 Prompt: ${prompts[i].substring(0, 200)}...`);
+          console.log(`🖼️ Base64 image length: ${base64Image.length} characters`);
+          
             const startTime = Date.now();
             
             // Add timeout to prevent hanging
@@ -268,11 +406,62 @@ Return ONLY the prompts, one per line, numbered 1-${count}.`;
             const generationTime = Date.now() - startTime;
             console.log(`⏱️ Image ${i + 1} generated in ${generationTime}ms`);
             
-            // Extract image data from response
+          // Extract image data from response with detailed debugging
+          console.log(`🔍 Analyzing response structure for image ${i + 1}...`);
+          console.log(`📊 Full response:`, JSON.stringify(response, null, 2));
+          console.log(`📊 Response candidates count: ${response.candidates?.length || 0}`);
+          
+          if (!response.candidates || response.candidates.length === 0) {
+            console.error(`❌ No candidates in response for image ${i + 1}`);
+            console.log('📊 Response metadata:', {
+              usageMetadata: response.usageMetadata,
+              model: response.model
+            });
+            continue;
+          }
+          
+          const candidate = response.candidates[0];
+          console.log(`📊 Candidate details:`, {
+            finishReason: candidate.finishReason,
+            safetyRatings: candidate.safetyRatings,
+            hasContent: !!candidate.content,
+            contentPartsCount: candidate.content?.parts?.length || 0
+          });
+          
+          if (!candidate.content) {
+            console.error(`❌ No content in candidate for image ${i + 1}`);
+            console.log('📊 Candidate structure:', JSON.stringify(candidate, null, 2));
+            continue;
+          }
+          
+          if (!candidate.content.parts) {
+            console.error(`❌ No parts in candidate content for image ${i + 1}`);
+            console.log('📊 Content structure:', JSON.stringify(candidate.content, null, 2));
+            continue;
+          }
+          
+          console.log(`📊 Content parts count: ${candidate.content.parts.length}`);
+          
             let imageFound = false;
-            for (const part of response.candidates[0].content.parts) {
+          for (let partIndex = 0; partIndex < candidate.content.parts.length; partIndex++) {
+            const part = candidate.content.parts[partIndex];
+            console.log(`📊 Part ${partIndex} details:`, {
+              hasText: !!part.text,
+              textLength: part.text?.length || 0,
+              hasInlineData: !!part.inlineData,
+              mimeType: part.inlineData?.mimeType || 'none',
+              dataLength: part.inlineData?.data?.length || 0
+            });
+            
+            if (part.text) {
+              console.log(`📝 Text content: ${part.text.substring(0, 200)}...`);
+            }
+            
               if (part.inlineData) {
-                console.log(`🖼️ Image data found for image ${i + 1}`);
+              console.log(`🖼️ Image data found for image ${i + 1} in part ${partIndex}`);
+              console.log(`📊 MIME type: ${part.inlineData.mimeType}`);
+              console.log(`📊 Data length: ${part.inlineData.data.length} characters`);
+              
                 const imageData = part.inlineData.data;
                 const imageUri = await this.saveImageToFile(imageData);
                 
@@ -282,36 +471,30 @@ Return ONLY the prompts, one per line, numbered 1-${count}.`;
                   variationType,
                   prompt: prompts[i]
                 });
-                console.log(`✅ Image ${i + 1} saved successfully`);
+              console.log(`✅ Image ${i + 1} saved successfully to: ${imageUri}`);
                 imageFound = true;
-                imageGenerated = true;
                 break;
               }
             }
             
             if (!imageFound) {
               console.warn(`⚠️ No image data found in response for image ${i + 1}`);
-              console.log('Response structure:', JSON.stringify(response, null, 2));
-            }
-          } catch (error) {
-            console.error(`❌ Error generating image ${i + 1} (attempt ${retryAttempt}/${maxRetries}):`, error);
-            
-            // Check if it's a retryable error
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            if (errorMessage.includes('503') || errorMessage.includes('429') || errorMessage.includes('overloaded') || errorMessage.includes('quota')) {
-              if (retryAttempt < maxRetries) {
-                const delay = Math.pow(2, retryAttempt) * 1000; // Exponential backoff
-                console.log(`⏳ Retrying in ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-              } else {
-                console.error(`❌ Failed to generate image ${i + 1} after ${maxRetries} attempts`);
-              }
-            } else {
-              // Non-retryable error, break out of retry loop
-              console.error('❌ Non-retryable error, skipping image');
-              break;
-            }
+            console.log('📊 All parts analyzed, none contained image data');
+            console.log('📊 This could be due to:');
+            console.log('   - Safety filters blocked the image');
+            console.log('   - Model returned text instead of image');
+            console.log('   - API quota exceeded');
+            console.log('   - Model error or timeout');
           }
+        } catch (error) {
+          console.error(`❌ Error generating image ${i + 1}:`, error);
+          console.error('📊 Error details:', {
+            name: error instanceof Error ? error.name : 'Unknown',
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+          });
+          // Continue to next image instead of retrying
+          continue;
         }
       }
 

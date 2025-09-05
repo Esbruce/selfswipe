@@ -235,25 +235,23 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       
       const geminiService = new GeminiService();
       
-      // Analyze the uploaded image
+      // Combined analysis and prompt generation (only runs once for uploaded image)
       setProgress({
         step: 'analyzing',
-        progress: 10,
-        message: 'Analyzing your image...'
+        progress: 20,
+        message: 'Analyzing your image and creating prompts...'
       });
       
-      const imageAnalysis = await geminiService.analyzeImage(imageUri);
-      console.log('Image analysis completed:', imageAnalysis);
+      console.log('🔍 Starting combined analysis and prompt generation...');
+      const { analysis: imageAnalysis, prompts } = await geminiService.analyzeImageAndGeneratePrompts(
+        imageUri, 
+        variationType, 
+        10
+      );
       
-      // Generate prompts
-      setProgress({
-        step: 'prompting',
-        progress: 30,
-        message: 'Creating personalized prompts...'
-      });
-      
-      const prompts = await geminiService.generatePrompts(imageAnalysis, variationType, 10);
-      console.log('Generated prompts:', prompts.length);
+      console.log('✅ Combined analysis and prompt generation completed');
+      console.log('📊 Analysis:', imageAnalysis);
+      console.log('📝 Generated prompts:', prompts.length);
       
       // Store analysis and prompts
       console.log('💾 Storing analysis and prompts in session...');
@@ -281,13 +279,18 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       await generateNextImageWithPrompts(prompts, 1);
       console.log('🎯 Second image generated');
       
-      setGenerating(false);
-      setProgress(null);
+      setProgress({
+        step: 'generating',
+        progress: 100,
+        message: 'Ready to swipe!'
+      });
+      
+      console.log('🎉 Initial generation complete!');
     } catch (error) {
-      console.error('Error in initializeGeneration:', error);
+      console.error('❌ Error in initializeGeneration:', error);
       setError(error instanceof Error ? error.message : 'Failed to initialize generation');
+    } finally {
       setGenerating(false);
-      setProgress(null);
     }
   };
 
@@ -328,6 +331,15 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       });
       
       console.log('🎨 Calling geminiService.generateImages...');
+      console.log('📸 Original image URI:', state.currentSession.originalImageUri);
+      console.log('🎯 Variation type:', state.currentSession.variationType);
+      console.log('📝 Prompt being used:', prompt);
+      console.log('📊 Current session state:', {
+        imagesCount: state.currentSession.images.length,
+        promptsCount: state.currentSession.prompts?.length || 0,
+        currentIndex: state.currentSession.currentIndex
+      });
+      
       const generatedImages = await geminiService.generateImages(
         state.currentSession.originalImageUri,
         [prompt],
@@ -339,6 +351,12 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       );
       
       console.log(`🎉 Generated ${generatedImages.length} images`);
+      console.log('📊 Generated images details:', generatedImages.map(img => ({
+        id: img.id,
+        uri: img.uri,
+        variationType: img.variationType,
+        promptLength: img.prompt?.length || 0
+      })));
       
       if (generatedImages.length > 0) {
         const swipeImage: SwipeImage = {
@@ -350,9 +368,22 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         };
         
         console.log('💾 Adding image to session:', swipeImage.id);
+        console.log('🖼️ Image URI:', swipeImage.uri);
+        console.log('📊 Session before adding image:', {
+          currentImagesCount: state.currentSession.images.length,
+          currentIndex: state.currentSession.currentIndex
+        });
+        
         dispatch({ type: 'ADD_IMAGE', payload: swipeImage });
+        
+        console.log('✅ Image added to session successfully');
       } else {
         console.warn('⚠️ No images were generated');
+        console.log('📊 This could be due to:');
+        console.log('   - API response had no image data');
+        console.log('   - Parsing failed');
+        console.log('   - Safety filters blocked the image');
+        console.log('   - Model returned text instead of image');
       }
     } catch (error) {
       console.error('❌ Error generating next image:', error);
@@ -397,6 +428,15 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       });
       
       console.log('🎨 Calling geminiService.generateImages...');
+      console.log('📸 Original image URI:', state.currentSession.originalImageUri);
+      console.log('🎯 Variation type:', state.currentSession.variationType);
+      console.log('📝 Prompt being used:', prompt);
+      console.log('📊 Current session state:', {
+        imagesCount: state.currentSession.images.length,
+        promptsCount: state.currentSession.prompts?.length || 0,
+        currentIndex: state.currentSession.currentIndex
+      });
+      
       const generatedImages = await geminiService.generateImages(
         state.currentSession.originalImageUri,
         [prompt],
@@ -408,6 +448,12 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       );
       
       console.log(`🎉 Generated ${generatedImages.length} images`);
+      console.log('📊 Generated images details:', generatedImages.map(img => ({
+        id: img.id,
+        uri: img.uri,
+        variationType: img.variationType,
+        promptLength: img.prompt?.length || 0
+      })));
       
       if (generatedImages.length > 0) {
         const swipeImage: SwipeImage = {
@@ -419,9 +465,22 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         };
         
         console.log('💾 Adding image to session:', swipeImage.id);
+        console.log('🖼️ Image URI:', swipeImage.uri);
+        console.log('📊 Session before adding image:', {
+          currentImagesCount: state.currentSession.images.length,
+          currentIndex: state.currentSession.currentIndex
+        });
+        
         dispatch({ type: 'ADD_IMAGE', payload: swipeImage });
+        
+        console.log('✅ Image added to session successfully');
       } else {
         console.warn('⚠️ No images were generated');
+        console.log('📊 This could be due to:');
+        console.log('   - API response had no image data');
+        console.log('   - Parsing failed');
+        console.log('   - Safety filters blocked the image');
+        console.log('   - Model returned text instead of image');
       }
     } catch (error) {
       console.error('❌ Error generating next image:', error);
