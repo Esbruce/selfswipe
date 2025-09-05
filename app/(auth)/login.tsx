@@ -1,75 +1,67 @@
-import { router } from 'expo-router';
+import { ThemedText } from '@/components/ThemedText';
+import { ThemedView } from '@/components/ThemedView';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
     StyleSheet,
-    Text,
     TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useAuth } from '../../contexts/AuthContext';
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const { login, state } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
 
-  const handleAuth = async () => {
+  const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Error', 'Please enter both email and password');
       return;
     }
 
-    setLoading(true);
     try {
-      const { error } = isSignUp 
-        ? await signUp(email, password)
-        : await signIn(email, password);
-
-      if (error) {
-        Alert.alert('Error', error.message);
-      } else {
-        if (isSignUp) {
-          Alert.alert('Success', 'Account created successfully! Please sign in.');
-          setIsSignUp(false);
-        } else {
-          router.replace('/(tabs)/explore');
-        }
-      }
+      await login(email, password);
+      router.push('/(tabs)');
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
-    } finally {
-      setLoading(false);
+      Alert.alert('Login Failed', 'Please check your credentials and try again');
     }
   };
 
-  return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.formContainer}>
-          <Text style={styles.title}>
-            {isSignUp ? 'Create Account' : 'Welcome Back'}
-          </Text>
-          <Text style={styles.subtitle}>
-            {isSignUp ? 'Sign up to get started' : 'Sign in to your account'}
-          </Text>
+  const handleBack = () => {
+    router.back();
+  };
 
+  return (
+    <ThemedView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <ThemedText style={styles.backButtonText}>← Back</ThemedText>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.content}>
+        <ThemedText type="title" style={styles.title}>
+          Sign In
+        </ThemedText>
+        
+        <ThemedText style={styles.subtitle}>
+          Enter your credentials to access the app
+        </ThemedText>
+
+        <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
+            <ThemedText style={styles.label}>Email</ThemedText>
             <TextInput
               style={styles.input}
-              placeholder="Enter your email"
               value={email}
               onChangeText={setEmail}
+              placeholder="Enter your email"
+              placeholderTextColor="#999"
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -77,71 +69,74 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
+            <ThemedText style={styles.label}>Password</ThemedText>
             <TextInput
               style={styles.input}
-              placeholder="Enter your password"
               value={password}
               onChangeText={setPassword}
+              placeholder="Enter your password"
+              placeholderTextColor="#999"
               secureTextEntry
               autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleAuth}
-            disabled={loading}
+            style={[styles.loginButton, state.isLoading && styles.loginButtonDisabled]}
+            onPress={handleLogin}
+            disabled={state.isLoading}
           >
-            <Text style={styles.buttonText}>
-              {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
-            </Text>
+            {state.isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText style={styles.loginButtonText}>Sign In</ThemedText>
+            )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.switchButton}
-            onPress={() => setIsSignUp(!isSignUp)}
-          >
-            <Text style={styles.switchText}>
-              {isSignUp 
-                ? 'Already have an account? Sign In' 
-                : "Don't have an account? Sign Up"
-              }
-            </Text>
-          </TouchableOpacity>
+          {state.error && (
+            <ThemedText style={styles.errorText}>{state.error}</ThemedText>
+          )}
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </View>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f5f5f5',
   },
-  scrollContainer: {
-    flexGrow: 1,
+  header: {
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
     justifyContent: 'center',
-    padding: 20,
-  },
-  formContainer: {
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666666',
     textAlign: 'center',
     marginBottom: 40,
+    opacity: 0.7,
+  },
+  form: {
+    width: '100%',
   },
   inputContainer: {
     marginBottom: 20,
@@ -149,40 +144,36 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 8,
   },
   input: {
+    backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 12,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
-    backgroundColor: '#fafafa',
-    color: '#1a1a1a',
   },
-  button: {
-    backgroundColor: '#4A90E2',
+  loginButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
     borderRadius: 12,
-    padding: 16,
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: 20,
   },
-  buttonDisabled: {
-    backgroundColor: '#cccccc',
+  loginButtonDisabled: {
+    backgroundColor: '#ccc',
   },
-  buttonText: {
-    color: '#ffffff',
+  loginButtonText: {
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  switchButton: {
-    alignItems: 'center',
-  },
-  switchText: {
-    color: '#4A90E2',
-    fontSize: 14,
-    fontWeight: '500',
+  errorText: {
+    color: '#ff4757',
+    textAlign: 'center',
+    marginTop: 16,
   },
 });

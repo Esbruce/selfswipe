@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  TouchableOpacity,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+import SwipeCard from '@/components/SwipeCard';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import SwipeCard from '@/components/SwipeCard';
-import { useSwipe } from '@/contexts/SwipeContext';
-import { SwipeImage } from '@/contexts/SwipeContext';
+import { SwipeImage, useSwipe } from '@/contexts/SwipeContext';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 export default function SwipeScreen() {
   const router = useRouter();
@@ -34,7 +33,7 @@ export default function SwipeScreen() {
   };
 
   useEffect(() => {
-    if (state.currentSession && state.currentSession.images.length === 0 && !state.isGenerating) {
+    if (state.currentSession && state.currentSession.images.length === 0 && !state.isGenerating && !isGenerating) {
       // Start generating images
       setIsGenerating(true);
       setGenerating(true);
@@ -47,7 +46,7 @@ export default function SwipeScreen() {
         setGenerating(false);
       }, 2000);
     }
-  }, [state.currentSession, setImages, setGenerating]);
+  }, [state.currentSession?.id, state.currentSession?.images.length, state.isGenerating, isGenerating, setImages, setGenerating]);
 
   const handleSwipeLeft = () => {
     swipeLeft();
