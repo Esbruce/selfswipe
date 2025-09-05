@@ -1,5 +1,7 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
+import { useEffect } from 'react';
+import { Alert, Platform, StyleSheet, TouchableOpacity } from 'react-native';
 
 import { Collapsible } from '@/components/Collapsible';
 import { ExternalLink } from '@/components/ExternalLink';
@@ -7,8 +9,68 @@ import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function TabTwoScreen() {
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      Alert.alert(
+        'Authentication Required',
+        'You need to sign in to access the Explore page.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => router.push('/(auth)/login') }
+        ]
+      );
+    }
+  }, [user, loading]);
+
+  if (loading) {
+    return (
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
+        headerImage={
+          <IconSymbol
+            size={310}
+            color="#808080"
+            name="chevron.left.forwardslash.chevron.right"
+            style={styles.headerImage}
+          />
+        }>
+        <ThemedView style={styles.titleContainer}>
+          <ThemedText type="title">Loading...</ThemedText>
+        </ThemedView>
+      </ParallaxScrollView>
+    );
+  }
+
+  if (!user) {
+    return (
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
+        headerImage={
+          <IconSymbol
+            size={310}
+            color="#808080"
+            name="chevron.left.forwardslash.chevron.right"
+            style={styles.headerImage}
+          />
+        }>
+        <ThemedView style={styles.titleContainer}>
+          <ThemedText type="title">Authentication Required</ThemedText>
+        </ThemedView>
+        <ThemedText>You need to sign in to access this content.</ThemedText>
+        <TouchableOpacity 
+          style={styles.signInButton} 
+          onPress={() => router.push('/(auth)/login')}
+        >
+          <ThemedText style={styles.signInButtonText}>Sign In</ThemedText>
+        </TouchableOpacity>
+      </ParallaxScrollView>
+    );
+  }
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
@@ -106,5 +168,17 @@ const styles = StyleSheet.create({
   titleContainer: {
     flexDirection: 'row',
     gap: 8,
+  },
+  signInButton: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+  signInButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
 });
