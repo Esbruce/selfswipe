@@ -58,8 +58,8 @@ export default function SwipeScreen() {
 
   const checkIfFinished = () => {
     if (state.currentSession && state.currentSession.currentIndex >= state.currentSession.images.length - 1) {
-      // Check if we've generated all 20 images
-      if (state.currentSession.images.length >= 20) {
+      // Check if we've generated all 10 images
+      if (state.currentSession.images.length >= 10) {
         // All images have been swiped through
         Alert.alert(
           'All Done!',
@@ -85,7 +85,7 @@ export default function SwipeScreen() {
           ]
         );
       }
-      // If we haven't generated all 20 yet, just wait for more images to be generated
+      // If we haven't generated all 10 yet, just wait for more images to be generated
     }
   };
 

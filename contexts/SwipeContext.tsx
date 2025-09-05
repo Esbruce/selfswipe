@@ -252,7 +252,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         message: 'Creating personalized prompts...'
       });
       
-      const prompts = await geminiService.generatePrompts(imageAnalysis, variationType, 20);
+      const prompts = await geminiService.generatePrompts(imageAnalysis, variationType, 10);
       console.log('Generated prompts:', prompts.length);
       
       // Store analysis and prompts
@@ -271,6 +271,13 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       console.log('🎯 About to generate first 2 images...');
       await generateNextImageWithPrompts(prompts, 0);
       console.log('🎯 First image generated, generating second...');
+      
+      setProgress({
+        step: 'generating',
+        progress: 75,
+        message: 'Generating second variation...'
+      });
+      
       await generateNextImageWithPrompts(prompts, 1);
       console.log('🎯 Second image generated');
       
@@ -297,6 +304,9 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       console.log('❌ Prompt index out of range');
       return;
     }
+    
+    // Set generating state for individual image generation
+    setGenerating(true);
     
     try {
       const geminiService = new GeminiService();
@@ -348,6 +358,8 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       console.error('❌ Error generating next image:', error);
       console.error('Error details:', error);
       // Don't set error state for individual image failures, just log
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -445,7 +457,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         message: 'Creating new variations...'
       });
       
-      const prompts = await geminiService.generatePrompts(imageAnalysis, state.currentSession.variationType, 10);
+      const prompts = await geminiService.generatePrompts(imageAnalysis, state.currentSession.variationType, 5);
       
       // Generate images
       const generatedImages = await geminiService.generateImages(

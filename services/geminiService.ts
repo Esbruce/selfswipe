@@ -139,10 +139,8 @@ class GeminiService {
   }
 
   private createPromptGenerationPrompt(analysis: ImageAnalysis, variationType: 'hairstyle' | 'outfit', count: number): string {
-    const baseTraits = `${analysis.gender}, ${analysis.ageRange}, ${analysis.skinTone} skin, ${analysis.faceShape} face shape`;
-    
     if (variationType === 'hairstyle') {
-      return `You are a professional image generation prompt expert. Based on this person's analysis, generate ${count} diverse and creative hairstyle prompts for image generation.
+      return `You are a professional image editing prompt expert. Generate ${count} diverse hairstyle editing prompts that will be used with the original photo to change ONLY the hairstyle while preserving all other features.
 
 Person Analysis:
 - Gender: ${analysis.gender}
@@ -155,18 +153,19 @@ Person Analysis:
 - Eye Color: ${analysis.eyeColor}
 - Overall Style: ${analysis.overallStyle}
 
-Generate ${count} unique hairstyle prompts that:
-1. Maintain the person's facial features, skin tone, and overall appearance
-2. Create diverse hairstyles (short, long, curly, straight, braided, etc.)
-3. Are appropriate for their age and style
-4. Include specific styling details
-5. Use professional photography terminology
+Generate ${count} unique hairstyle editing prompts that:
+1. Use the inpainting/semantic masking approach
+2. Change ONLY the hair while keeping facial features, skin tone, eyes, and everything else exactly the same
+3. Create diverse hairstyles (short, long, curly, straight, braided, updo, etc.)
+4. Are appropriate for their age and face shape
+5. Include specific styling details and texture descriptions
+6. Use professional photography terminology
 
-Format each prompt as a complete sentence starting with "Create a photorealistic portrait of a [person description] with [hairstyle details]."
+Format each prompt as: "Using the provided image, change only the hair to [specific hairstyle description]. Keep everything else in the image exactly the same, preserving the original facial features, skin tone, eye color, facial structure, and composition. The person's identity and appearance should remain completely unchanged except for the hairstyle."
 
 Return ONLY the prompts, one per line, numbered 1-${count}.`;
     } else {
-      return `You are a professional image generation prompt expert. Based on this person's analysis, generate ${count} diverse and creative outfit prompts for image generation.
+      return `You are a professional image editing prompt expert. Generate ${count} diverse outfit editing prompts that will be used with the original photo to change ONLY the clothing while preserving all other features.
 
 Person Analysis:
 - Gender: ${analysis.gender}
@@ -176,14 +175,15 @@ Person Analysis:
 - Current Clothing Style: ${analysis.clothingStyle}
 - Overall Style: ${analysis.overallStyle}
 
-Generate ${count} unique outfit prompts that:
-1. Maintain the person's facial features, body type, and overall appearance
-2. Create diverse outfit styles (casual, formal, bohemian, edgy, etc.)
-3. Are appropriate for their age and style
-4. Include specific clothing details and accessories
-5. Use professional photography terminology
+Generate ${count} unique outfit editing prompts that:
+1. Use the inpainting/semantic masking approach
+2. Change ONLY the clothing/outfit while keeping facial features, skin tone, hair, and everything else exactly the same
+3. Create diverse outfit styles (casual, formal, bohemian, edgy, professional, etc.)
+4. Are appropriate for their age and body type
+5. Include specific clothing details, colors, and accessories
+6. Use professional photography terminology
 
-Format each prompt as a complete sentence starting with "Create a photorealistic full-body portrait of a [person description] wearing [outfit details]."
+Format each prompt as: "Using the provided image, change only the clothing to [specific outfit description]. Keep everything else in the image exactly the same, preserving the original facial features, skin tone, hair, facial structure, and composition. The person's identity and appearance should remain completely unchanged except for the outfit."
 
 Return ONLY the prompts, one per line, numbered 1-${count}.`;
     }
@@ -217,7 +217,7 @@ Return ONLY the prompts, one per line, numbered 1-${count}.`;
     onProgress?: (progress: GenerationProgress) => void
   ): Promise<GeneratedImage[]> {
     try {
-      console.log(`🎨 Starting image generation for ${prompts.length} prompts`);
+      console.log(`🎨 Starting image generation for ${prompts.length} prompts using inpainting approach`);
       console.log(`📝 First prompt: ${prompts[0]?.substring(0, 100)}...`);
       
       const generatedImages: GeneratedImage[] = [];
@@ -251,6 +251,7 @@ Return ONLY the prompts, one per line, numbered 1-${count}.`;
               setTimeout(() => reject(new Error('Image generation timeout after 60 seconds')), 60000);
             });
             
+            // Use inpainting approach: pass original image with text prompt for editing
             const generationPromise = this.imageModel.generateContent([
               {
                 inlineData: {
