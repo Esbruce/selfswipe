@@ -8,6 +8,10 @@
     "scheme": "selfswipe",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "supabaseUrl": "https://grlykgmodfwoeprmsfol.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdybHlrZ21vZGZ3b2Vwcm1zZm9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwNzI5NDYsImV4cCI6MjA3MjY0ODk0Nn0.LXV2CaQR6PC73UlVmuGa-Gyq-e0tH8XwizfDAhSvpx4"
+    },
     "ios": {
       "supportsTablet": true
     },

@@ -1,10 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 import React, { createContext, ReactNode, useContext, useEffect, useReducer } from 'react';
 
 interface User {
   id: string;
   email: string;
-  name: string;
+  name?: string;
 }
 
 interface AuthState {
@@ -63,6 +63,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 interface AuthContextType {
   state: AuthState;
   login: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuthStatus: () => Promise<void>;
 }
@@ -73,50 +74,118 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   useEffect(() => {
+    // Get initial session
     checkAuthStatus();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          const user: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.user_metadata?.name || session.user.email?.split('@')[0],
+          };
+          dispatch({ type: 'SET_USER', payload: user });
+        } else {
+          dispatch({ type: 'SET_USER', payload: null });
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
+      dispatch({ type: 'SET_ERROR', payload: null });
       
-      // Mock login - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const user: User = {
-        id: '1',
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        name: email.split('@')[0],
-      };
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.user) {
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email || '',
+          name: data.user.user_metadata?.name || data.user.email?.split('@')[0],
+        };
+        dispatch({ type: 'SET_USER', payload: user });
+      }
+    } catch (error: any) {
+      dispatch({ type: 'SET_ERROR', payload: error.message || 'Login failed' });
+    }
+  };
+
+  const signup = async (email: string, password: string) => {
+    try {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      dispatch({ type: 'SET_ERROR', payload: null });
       
-      await AsyncStorage.setItem('user', JSON.stringify(user));
-      dispatch({ type: 'SET_USER', payload: user });
-    } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: 'Login failed' });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.user) {
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email || '',
+          name: data.user.user_metadata?.name || data.user.email?.split('@')[0],
+        };
+        dispatch({ type: 'SET_USER', payload: user });
+      }
+    } catch (error: any) {
+      dispatch({ type: 'SET_ERROR', payload: error.message || 'Signup failed' });
     }
   };
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem('user');
+      dispatch({ type: 'SET_LOADING', payload: true });
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        throw error;
+      }
+      
       dispatch({ type: 'LOGOUT' });
-    } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: 'Logout failed' });
+    } catch (error: any) {
+      dispatch({ type: 'SET_ERROR', payload: error.message || 'Logout failed' });
     }
   };
 
   const checkAuthStatus = async () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      const userJson = await AsyncStorage.getItem('user');
-      if (userJson) {
-        const user = JSON.parse(userJson);
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        throw error;
+      }
+
+      if (session?.user) {
+        const user: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.name || session.user.email?.split('@')[0],
+        };
         dispatch({ type: 'SET_USER', payload: user });
       } else {
         dispatch({ type: 'SET_USER', payload: null });
       }
-    } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to check auth status' });
+    } catch (error: any) {
+      dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to check auth status' });
     }
   };
 
@@ -125,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         state,
         login,
+        signup,
         logout,
         checkAuthStatus,
       }}

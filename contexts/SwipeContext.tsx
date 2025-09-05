@@ -1,12 +1,9 @@
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-export type VariationType = 'hairstyle' | 'outfit';
+import React, { createContext, ReactNode, useContext, useReducer } from 'react';
 
 export interface SwipeImage {
   id: string;
   uri: string;
-  variationType: VariationType;
   isLiked: boolean;
   generatedAt: Date;
 }
@@ -14,7 +11,7 @@ export interface SwipeImage {
 export interface SwipeSession {
   id: string;
   originalImageUri: string;
-  variationType: VariationType;
+  uploadedImageUrl?: string;
   images: SwipeImage[];
   currentIndex: number;
   likedImages: SwipeImage[];
@@ -30,7 +27,7 @@ interface SwipeState {
 }
 
 type SwipeAction =
-  | { type: 'START_SESSION'; payload: { originalImageUri: string; variationType: VariationType } }
+  | { type: 'START_SESSION'; payload: { originalImageUri: string; uploadedImageUrl?: string } }
   | { type: 'SET_IMAGES'; payload: SwipeImage[] }
   | { type: 'SWIPE_LEFT' }
   | { type: 'SWIPE_RIGHT' }
@@ -52,7 +49,7 @@ function swipeReducer(state: SwipeState, action: SwipeAction): SwipeState {
       const newSession: SwipeSession = {
         id: Date.now().toString(),
         originalImageUri: action.payload.originalImageUri,
-        variationType: action.payload.variationType,
+        uploadedImageUrl: action.payload.uploadedImageUrl,
         images: [],
         currentIndex: 0,
         likedImages: [],
@@ -147,7 +144,7 @@ function swipeReducer(state: SwipeState, action: SwipeAction): SwipeState {
 
 interface SwipeContextType {
   state: SwipeState;
-  startSession: (originalImageUri: string, variationType: VariationType) => void;
+  startSession: (originalImageUri: string, uploadedImageUrl?: string) => void;
   setImages: (images: SwipeImage[]) => void;
   swipeLeft: () => void;
   swipeRight: () => void;
@@ -163,8 +160,8 @@ const SwipeContext = createContext<SwipeContextType | undefined>(undefined);
 export function SwipeProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(swipeReducer, initialState);
 
-  const startSession = (originalImageUri: string, variationType: VariationType) => {
-    dispatch({ type: 'START_SESSION', payload: { originalImageUri, variationType } });
+  const startSession = (originalImageUri: string, uploadedImageUrl?: string) => {
+    dispatch({ type: 'START_SESSION', payload: { originalImageUri, uploadedImageUrl } });
   };
 
   const setImages = (images: SwipeImage[]) => {

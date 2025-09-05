@@ -1,27 +1,34 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { useAuth } from '@/contexts/AuthContext';
+import { testAuthentication } from '@/lib/authTest';
+import { uploadFileToSupabase, UploadResult } from '@/lib/fileUpload';
+import * as FileSystem from 'expo-file-system';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import React, { useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    StyleSheet,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 
-export type VariationType = 'hairstyle' | 'outfit';
-
 interface ImageUploadProps {
-  onImageSelected: (uri: string, variationType: VariationType) => void;
+  onImageUploaded: (uri: string, uploadedUrl: string) => void;
   isLoading?: boolean;
 }
 
-export default function ImageUpload({ onImageSelected, isLoading = false }: ImageUploadProps) {
+export default function ImageUpload({ onImageUploaded, isLoading = false }: ImageUploadProps) {
+  const { state: authState } = useAuth();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [variationType, setVariationType] = useState<VariationType | null>(null);
+  const [selectedMeta, setSelectedMeta] = useState<{ mimeType?: string; fileName?: string; fileSize?: number } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -48,7 +55,19 @@ export default function ImageUpload({ onImageSelected, isLoading = false }: Imag
     });
 
     if (!result.canceled && result.assets[0]) {
-      setSelectedImage(result.assets[0].uri);
+      const asset = result.assets[0] as any;
+      const guessedFromExt = (() => {
+        const ext = (asset.fileName?.split('.').pop() || '').toLowerCase();
+        if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+        if (ext === 'png') return 'image/png';
+        if (ext === 'webp') return 'image/webp';
+        if (ext === 'gif') return 'image/gif';
+        if (ext === 'heic' || ext === 'heif') return 'image/heic';
+        return undefined;
+      })();
+      const mimeType = asset.mimeType || (asset.type && asset.type.includes('/') ? asset.type : guessedFromExt);
+      setSelectedImage(asset.uri);
+      setSelectedMeta({ mimeType, fileName: asset.fileName, fileSize: asset.fileSize });
     }
   };
 
@@ -70,23 +89,118 @@ export default function ImageUpload({ onImageSelected, isLoading = false }: Imag
     });
 
     if (!result.canceled && result.assets[0]) {
-      setSelectedImage(result.assets[0].uri);
+      const asset = result.assets[0] as any;
+      const guessedFromExt = (() => {
+        const ext = (asset.fileName?.split('.').pop() || '').toLowerCase();
+        if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+        if (ext === 'png') return 'image/png';
+        if (ext === 'webp') return 'image/webp';
+        if (ext === 'gif') return 'image/gif';
+        if (ext === 'heic' || ext === 'heif') return 'image/heic';
+        return undefined;
+      })();
+      const mimeType = asset.mimeType || (asset.type && asset.type.includes('/') ? asset.type : guessedFromExt);
+      setSelectedImage(asset.uri);
+      setSelectedMeta({ mimeType, fileName: asset.fileName, fileSize: asset.fileSize });
     }
   };
 
-  const handleVariationSelect = (type: VariationType) => {
-    setVariationType(type);
-  };
+  const handleUpload = async () => {
+    if (!selectedImage) return;
 
-  const handleContinue = () => {
-    if (selectedImage && variationType) {
-      onImageSelected(selectedImage, variationType);
+    if (!authState.isAuthenticated) {
+      Alert.alert(
+        'Authentication Required',
+        'Please sign in to upload images to the cloud.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Optional: quick auth sanity check (can be removed once stable)
+    try {
+      const authTest = await testAuthentication();
+      if (!authTest.success) {
+        Alert.alert(
+          'Authentication Error',
+          `Authentication test failed: ${authTest.error}`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    } catch {}
+
+    setIsUploading(true);
+    setUploadError(null);
+    setUploadProgress(0);
+
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
+    try {
+      // Validate file size before uploading
+      try {
+        let fileSize = selectedMeta?.fileSize || 0;
+        if (!fileSize) {
+          const info = await FileSystem.getInfoAsync(selectedImage, { size: true });
+          fileSize = (info.size as number) || 0;
+        }
+        if (fileSize > MAX_FILE_SIZE) {
+          setUploadError('File too large. Please choose an image smaller than 5MB.');
+          Alert.alert('File Too Large', 'Please choose an image smaller than 5MB.', [{ text: 'OK' }]);
+          return;
+        }
+      } catch {}
+
+      // Simulate progress for better UX
+      progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+
+      const result: UploadResult = await uploadFileToSupabase(selectedImage, {
+        userId: authState.user!.id,
+        folder: 'upload',
+        upsert: false,
+        fileName: selectedMeta?.fileName,
+        sourceMimeType: selectedMeta?.mimeType,
+      });
+
+      if (progressInterval) clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      if (result.success && result.url) {
+        setUploadedUrl(result.url);
+        onImageUploaded(selectedImage, result.url);
+      } else {
+        setUploadError(result.error || 'Upload failed');
+        Alert.alert(
+          'Upload Failed',
+          result.error || 'Failed to upload image. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error: any) {
+      setUploadError(error.message || 'Upload failed');
+      Alert.alert(
+        'Upload Error',
+        error.message || 'An unexpected error occurred. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      if (progressInterval) clearInterval(progressInterval);
+      setIsUploading(false);
     }
   };
 
   const resetSelection = () => {
     setSelectedImage(null);
-    setVariationType(null);
+    setSelectedMeta(null);
+    setUploadProgress(0);
+    setUploadError(null);
+    setUploadedUrl(null);
   };
 
   return (
@@ -96,7 +210,7 @@ export default function ImageUpload({ onImageSelected, isLoading = false }: Imag
       </ThemedText>
       
       <ThemedText style={styles.subtitle}>
-        Choose a clear photo of yourself to generate variations
+        Choose a clear photo of yourself to get started
       </ThemedText>
 
       {!selectedImage ? (
@@ -131,57 +245,45 @@ export default function ImageUpload({ onImageSelected, isLoading = false }: Imag
             </TouchableOpacity>
           </View>
 
-          <View style={styles.variationSection}>
-            <ThemedText type="subtitle" style={styles.variationTitle}>
-              What would you like to vary?
-            </ThemedText>
-            
-            <View style={styles.variationButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.variationButton,
-                  variationType === 'hairstyle' && styles.variationButtonSelected
-                ]}
-                onPress={() => handleVariationSelect('hairstyle')}
-              >
-                <ThemedText style={[
-                  styles.variationButtonText,
-                  variationType === 'hairstyle' && styles.variationButtonTextSelected
-                ]}>
-                  ✂️ Hairstyle
-                </ThemedText>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.variationButton,
-                  variationType === 'outfit' && styles.variationButtonSelected
-                ]}
-                onPress={() => handleVariationSelect('outfit')}
-              >
-                <ThemedText style={[
-                  styles.variationButtonText,
-                  variationType === 'outfit' && styles.variationButtonTextSelected
-                ]}>
-                  👕 Outfit
-                </ThemedText>
-              </TouchableOpacity>
+          {/* Upload Progress */}
+          {isUploading && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+              </View>
+              <ThemedText style={styles.progressText}>
+                Uploading... {uploadProgress}%
+              </ThemedText>
             </View>
-          </View>
+          )}
+
+          {/* Upload Success */}
+          {uploadedUrl && !isUploading && (
+            <View style={styles.successContainer}>
+              <ThemedText style={styles.successText}>✅ Upload successful!</ThemedText>
+            </View>
+          )}
+
+          {/* Upload Error */}
+          {uploadError && !isUploading && (
+            <View style={styles.errorContainer}>
+              <ThemedText style={styles.errorText}>❌ {uploadError}</ThemedText>
+            </View>
+          )}
 
           <TouchableOpacity
             style={[
-              styles.continueButton,
-              (!variationType || isLoading) && styles.continueButtonDisabled
+              styles.uploadButton,
+              (isLoading || isUploading) && styles.uploadButtonDisabled
             ]}
-            onPress={handleContinue}
-            disabled={!variationType || isLoading}
+            onPress={handleUpload}
+            disabled={isLoading || isUploading}
           >
-            {isLoading ? (
+            {isLoading || isUploading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <ThemedText style={styles.continueButtonText}>
-                Generate Variations
+              <ThemedText style={styles.uploadButtonText}>
+                Upload to Cloud
               </ThemedText>
             )}
           </TouchableOpacity>
@@ -200,11 +302,13 @@ const styles = StyleSheet.create({
   title: {
     textAlign: 'center',
     marginBottom: 8,
+    color: '#2c3e50',
   },
   subtitle: {
     textAlign: 'center',
     marginBottom: 40,
     opacity: 0.7,
+    color: '#7f8c8d',
   },
   uploadSection: {
     alignItems: 'center',
@@ -213,7 +317,10 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f8f9fa',
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
@@ -225,22 +332,39 @@ const styles = StyleSheet.create({
   placeholderSubtext: {
     fontSize: 16,
     opacity: 0.6,
+    color: '#6c757d',
   },
   buttonContainer: {
     width: '100%',
     gap: 12,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#4A90E2',
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
     alignItems: 'center',
+    shadowColor: '#4A90E2',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   secondaryButton: {
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: '#4A90E2',
+    shadowColor: '#4A90E2',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 3,
   },
   buttonText: {
     color: '#fff',
@@ -248,78 +372,118 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   secondaryButtonText: {
-    color: '#007AFF',
+    color: '#4A90E2',
   },
   imageSection: {
     alignItems: 'center',
   },
   imageContainer: {
     position: 'relative',
-    marginBottom: 30,
+    marginBottom: 20,
   },
   selectedImage: {
     width: 200,
     height: 200,
     borderRadius: 100,
+    borderWidth: 3,
+    borderColor: '#4A90E2',
   },
   changeButton: {
     position: 'absolute',
     bottom: -10,
     right: -10,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#4A90E2',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    shadowColor: '#4A90E2',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   changeButtonText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
   },
-  variationSection: {
+  progressContainer: {
     width: '100%',
-    marginBottom: 30,
-  },
-  variationTitle: {
-    textAlign: 'center',
     marginBottom: 20,
+    paddingHorizontal: 10,
   },
-  variationButtons: {
-    flexDirection: 'row',
-    gap: 12,
+  progressBar: {
+    height: 8,
+    backgroundColor: '#e9ecef',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
   },
-  variationButton: {
-    flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    alignItems: 'center',
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#4A90E2',
+    borderRadius: 4,
   },
-  variationButtonSelected: {
-    borderColor: '#007AFF',
-    backgroundColor: '#f0f8ff',
-  },
-  variationButtonText: {
-    fontSize: 16,
+  progressText: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#4A90E2',
     fontWeight: '500',
   },
-  variationButtonTextSelected: {
-    color: '#007AFF',
+  successContainer: {
+    backgroundColor: '#d4edda',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#c3e6cb',
   },
-  continueButton: {
-    backgroundColor: '#007AFF',
+  successText: {
+    textAlign: 'center',
+    color: '#155724',
+    fontWeight: '500',
+  },
+  errorContainer: {
+    backgroundColor: '#f8d7da',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#f5c6cb',
+  },
+  errorText: {
+    textAlign: 'center',
+    color: '#721c24',
+    fontWeight: '500',
+  },
+  uploadButton: {
+    backgroundColor: '#4A90E2',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
     alignItems: 'center',
     width: '100%',
+    marginTop: 20,
+    shadowColor: '#4A90E2',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
   },
-  continueButtonDisabled: {
-    backgroundColor: '#ccc',
+  uploadButtonDisabled: {
+    backgroundColor: '#adb5bd',
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  continueButtonText: {
+  uploadButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

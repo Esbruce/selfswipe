@@ -12,23 +12,34 @@ import {
     View,
 } from 'react-native';
 
-export default function LoginScreen() {
+export default function SignupScreen() {
   const router = useRouter();
-  const { login, state } = useAuth();
+  const { signup, state } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+  const handleSignup = async () => {
+    if (!email || !password || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
       return;
     }
 
     try {
-      await login(email, password);
+      await signup(email, password);
       router.push('/(tabs)');
     } catch (error) {
-      Alert.alert('Login Failed', 'Please check your credentials and try again');
+      Alert.alert('Signup Failed', 'Please check your information and try again');
     }
   };
 
@@ -36,8 +47,8 @@ export default function LoginScreen() {
     router.back();
   };
 
-  const handleSignup = () => {
-    router.push('/(auth)/signup');
+  const handleLogin = () => {
+    router.push('/(auth)/login');
   };
 
   return (
@@ -50,11 +61,11 @@ export default function LoginScreen() {
 
       <View style={styles.content}>
         <ThemedText type="title" style={styles.title}>
-          Sign In
+          Create Account
         </ThemedText>
         
         <ThemedText style={styles.subtitle}>
-          Enter your credentials to access the app
+          Sign up to start using the app
         </ThemedText>
 
         <View style={styles.form}>
@@ -86,15 +97,29 @@ export default function LoginScreen() {
             />
           </View>
 
+          <View style={styles.inputContainer}>
+            <ThemedText style={styles.label}>Confirm Password</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Confirm your password"
+              placeholderTextColor="#999"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
           <TouchableOpacity
-            style={[styles.loginButton, state.isLoading && styles.loginButtonDisabled]}
-            onPress={handleLogin}
+            style={[styles.signupButton, state.isLoading && styles.signupButtonDisabled]}
+            onPress={handleSignup}
             disabled={state.isLoading}
           >
             {state.isLoading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <ThemedText style={styles.loginButtonText}>Sign In</ThemedText>
+              <ThemedText style={styles.signupButtonText}>Create Account</ThemedText>
             )}
           </TouchableOpacity>
 
@@ -102,12 +127,12 @@ export default function LoginScreen() {
             <ThemedText style={styles.errorText}>{state.error}</ThemedText>
           )}
 
-          <View style={styles.signupPrompt}>
-            <ThemedText style={styles.signupPromptText}>
-              Don't have an account?{' '}
+          <View style={styles.loginPrompt}>
+            <ThemedText style={styles.loginPromptText}>
+              Already have an account?{' '}
             </ThemedText>
-            <TouchableOpacity onPress={handleSignup}>
-              <ThemedText style={styles.signupLink}>Sign Up</ThemedText>
+            <TouchableOpacity onPress={handleLogin}>
+              <ThemedText style={styles.loginLink}>Sign In</ThemedText>
             </TouchableOpacity>
           </View>
         </View>
@@ -168,7 +193,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
   },
-  loginButton: {
+  signupButton: {
     backgroundColor: '#007AFF',
     paddingVertical: 16,
     paddingHorizontal: 32,
@@ -176,10 +201,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
-  loginButtonDisabled: {
+  signupButtonDisabled: {
     backgroundColor: '#ccc',
   },
-  loginButtonText: {
+  signupButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
@@ -189,16 +214,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
   },
-  signupPrompt: {
+  loginPrompt: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 24,
   },
-  signupPromptText: {
+  loginPromptText: {
     fontSize: 16,
     color: '#666',
   },
-  signupLink: {
+  loginLink: {
     fontSize: 16,
     color: '#007AFF',
     fontWeight: '600',

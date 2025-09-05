@@ -1,16 +1,35 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { SwipeProvider } from '@/contexts/SwipeContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const { state } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (state.isLoading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    const inTabsGroup = segments[0] === '(tabs)';
+
+    if (!state.isAuthenticated && !inAuthGroup) {
+      // User is not authenticated and not in auth group, redirect to login
+      router.replace('/(auth)/login');
+    } else if (state.isAuthenticated && inAuthGroup) {
+      // User is authenticated but in auth group, redirect to main app
+      router.replace('/(tabs)');
+    }
+  }, [state.isAuthenticated, state.isLoading, segments]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
