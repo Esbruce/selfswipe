@@ -1,71 +1,69 @@
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
     StyleSheet,
+    Text,
     TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function LoginScreen() {
-  const router = useRouter();
-  const { login, state } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { login, signup } = useAuth();
 
-  const handleLogin = async () => {
+  const handleAuth = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
+    setLoading(true);
     try {
-      await login(email, password);
-      router.push('/(tabs)');
+      if (isSignUp) {
+        await signup(email, password);
+        Alert.alert('Success', 'Account created successfully! Please sign in.');
+        setIsSignUp(false);
+      } else {
+        await login(email, password);
+        router.replace('/(tabs)/explore');
+      }
     } catch (error) {
-      Alert.alert('Login Failed', 'Please check your credentials and try again');
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleBack = () => {
-    router.back();
-  };
-
-  const handleSignup = () => {
-    router.push('/(auth)/signup');
-  };
-
   return (
-    <ThemedView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <ThemedText style={styles.backButtonText}>← Back</ThemedText>
-        </TouchableOpacity>
-      </View>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <View style={styles.formContainer}>
+          <Text style={styles.title}>
+            {isSignUp ? 'Create Account' : 'Welcome Back'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {isSignUp ? 'Sign up to get started' : 'Sign in to your account'}
+          </Text>
 
-      <View style={styles.content}>
-        <ThemedText type="title" style={styles.title}>
-          Sign In
-        </ThemedText>
-        
-        <ThemedText style={styles.subtitle}>
-          Enter your credentials to access the app
-        </ThemedText>
-
-        <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <ThemedText style={styles.label}>Email</ThemedText>
+            <Text style={styles.label}>Email</Text>
             <TextInput
               style={styles.input}
+              placeholder="Enter your email"
               value={email}
               onChangeText={setEmail}
-              placeholder="Enter your email"
-              placeholderTextColor="#999"
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -73,83 +71,71 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <ThemedText style={styles.label}>Password</ThemedText>
+            <Text style={styles.label}>Password</Text>
             <TextInput
               style={styles.input}
+              placeholder="Enter your password"
               value={password}
               onChangeText={setPassword}
-              placeholder="Enter your password"
-              placeholderTextColor="#999"
               secureTextEntry
               autoCapitalize="none"
-              autoCorrect={false}
             />
           </View>
 
           <TouchableOpacity
-            style={[styles.loginButton, state.isLoading && styles.loginButtonDisabled]}
-            onPress={handleLogin}
-            disabled={state.isLoading}
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleAuth}
+            disabled={loading}
           >
-            {state.isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <ThemedText style={styles.loginButtonText}>Sign In</ThemedText>
-            )}
+            <Text style={styles.buttonText}>
+              {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+            </Text>
           </TouchableOpacity>
 
-          {state.error && (
-            <ThemedText style={styles.errorText}>{state.error}</ThemedText>
-          )}
-
-          <View style={styles.signupPrompt}>
-            <ThemedText style={styles.signupPromptText}>
-              Don't have an account?{' '}
-            </ThemedText>
-            <TouchableOpacity onPress={handleSignup}>
-              <ThemedText style={styles.signupLink}>Sign Up</ThemedText>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.switchButton}
+            onPress={() => setIsSignUp(!isSignUp)}
+          >
+            <Text style={styles.switchText}>
+              {isSignUp 
+                ? 'Already have an account? Sign In' 
+                : "Don't have an account? Sign Up"
+              }
+            </Text>
+          </TouchableOpacity>
         </View>
-      </View>
-    </ThemedView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#ffffff',
   },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
+  scrollContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
+    padding: 20,
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
+    fontSize: 16,
+    color: '#666666',
     textAlign: 'center',
     marginBottom: 40,
-    opacity: 0.7,
-  },
-  form: {
-    width: '100%',
   },
   inputContainer: {
     marginBottom: 20,
@@ -157,50 +143,40 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#1a1a1a',
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    padding: 16,
     fontSize: 16,
+    backgroundColor: '#fafafa',
+    color: '#1a1a1a',
   },
-  loginButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
+  button: {
+    backgroundColor: '#4A90E2',
     borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 10,
+    marginBottom: 20,
   },
-  loginButtonDisabled: {
-    backgroundColor: '#ccc',
+  buttonDisabled: {
+    backgroundColor: '#cccccc',
   },
-  loginButtonText: {
-    color: '#fff',
+  buttonText: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },
-  errorText: {
-    color: '#ff4757',
-    textAlign: 'center',
-    marginTop: 16,
+  switchButton: {
+    alignItems: 'center',
   },
-  signupPrompt: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 24,
-  },
-  signupPromptText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  signupLink: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
+  switchText: {
+    color: '#4A90E2',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
